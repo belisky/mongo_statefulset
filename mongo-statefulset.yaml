@@ -1,0 +1,73 @@
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  labels:
+    name: mongodb
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+  clusterIP: None
+  selector:
+    name: mongodb
+    environment: test
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+  labels:
+    name: mongo
+spec:
+  serviceName: "mongodb"
+  selector:
+    matchLabels:
+      name: mongodb
+      environment: test
+  replicas: 3
+  minReadySeconds: 10
+  template:
+    metadata:
+      labels:
+        name: mongodb
+        selector: mongodb
+        environment: test
+    spec:
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: mongodb
+          image: mongo:4.0.17  
+          env:             
+            - name: "MONGO_INITDB_ROOT_USERNAME"
+              value: "mroot"                
+            - name: "MONGO_INITDB_ROOT_PASSWORD"
+              value: "mpass"        
+          command:
+            - "mongod"
+            - "--bind_ip"
+            - "0.0.0.0"
+            - "--replSet"
+            - "mongo"
+          ports:
+            - containerPort: 27017
+          volumeMounts:
+            - name: mongo-persistent-storage
+              mountPath: /data/db
+        - name: mongo-sidecar
+          image: cvallance/mongo-k8s-sidecar
+          env: 
+            - name: MONGO_SIDECAR_POD_LABELS
+              value: "app=mongodb,environment=test"
+  volumeClaimTemplates:
+  - metadata:
+      name: mongo-persistent-storage
+      annotations:
+        volume.beta.kubernetes.io/storage-class: "standard"
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: "fast"
+      resources:
+        requests:
+          storage: 5Gi
